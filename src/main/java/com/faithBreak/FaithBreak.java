@@ -339,8 +339,9 @@ public final class FaithBreak extends JavaPlugin implements Listener {
     private Map<String, String> getPrayerTimes(double latitude, double longitude, String date) {
         try {
             // Use aladhan.com API for prayer times
+            // Try method 4 (Umm Al-Qura University) which is commonly used in the Middle East
             String apiUrl = "http://api.aladhan.com/v1/timings/" + date + 
-                    "?latitude=" + latitude + "&longitude=" + longitude + "&method=2";
+                    "?latitude=" + latitude + "&longitude=" + longitude + "&method=4";
             getLogger().info("[DEBUG] Calling prayer time API: " + apiUrl);
             
             URL url = new URL(apiUrl);
@@ -389,12 +390,12 @@ public final class FaithBreak extends JavaPlugin implements Listener {
                     // Create a map to store prayer times
                     Map<String, String> prayerTimes = new HashMap<>();
                     
-                    // Add each prayer time with error checking
-                    addPrayerTime(prayerTimes, timings, "Fajr");
-                    addPrayerTime(prayerTimes, timings, "Dhuhr");
-                    addPrayerTime(prayerTimes, timings, "Asr");
-                    addPrayerTime(prayerTimes, timings, "Maghrib");
-                    addPrayerTime(prayerTimes, timings, "Isha");
+                    // Extract prayer times directly from the timings object
+                    extractPrayerTime(prayerTimes, timings, "Fajr");
+                    extractPrayerTime(prayerTimes, timings, "Dhuhr");
+                    extractPrayerTime(prayerTimes, timings, "Asr");
+                    extractPrayerTime(prayerTimes, timings, "Maghrib");
+                    extractPrayerTime(prayerTimes, timings, "Isha");
                     
                     // Check if we got any prayer times
                     if (prayerTimes.isEmpty()) {
@@ -428,12 +429,9 @@ public final class FaithBreak extends JavaPlugin implements Listener {
         int currentHour = now.getHour();
         int currentMinute = now.getMinute();
         
-        // Create a prayer time 4 minutes in the future for testing
-        // This will trigger the 2-minute warning
-        String testPrayerTime = String.format("%02d:%02d", 
-                (currentMinute + 4 >= 60) ? (currentHour + 1) % 24 : currentHour, 
-                (currentMinute + 4) % 60);
-        getLogger().info("[DEBUG] Created test prayer time: " + testPrayerTime + " (current time + 4 minutes)");
+        // Create a prayer time 2 minutes in the future for testing
+        String testPrayerTime = String.format("%02d:%02d", currentHour, (currentMinute + 2) % 60);
+        getLogger().info("[DEBUG] Created test prayer time: " + testPrayerTime + " (current time + 2 minutes)");
         
         fallbackTimes.put("Fajr", "05:00");
         fallbackTimes.put("Dhuhr", "12:00");
@@ -443,39 +441,25 @@ public final class FaithBreak extends JavaPlugin implements Listener {
         
         return fallbackTimes;
     }
-    
-    // Helper method to safely add a prayer time to the map
-    private void addPrayerTime(Map<String, String> prayerTimes, JsonObject timings, String prayerName) {
+
+    private void extractPrayerTime(Map<String, String> prayerTimes, JsonObject timings, String prayerName) {
         try {
             if (timings.has(prayerName)) {
-                JsonObject prayerObj = timings.get(prayerName).getAsJsonObject();
-                // The API returns time in format with additional data, we need to extract just the time
-                if (prayerObj.has("time")) {
-                    String timeStr = prayerObj.get("time").getAsString();
-                    // Extract just the time part (HH:MM) if needed
-                    prayerTimes.put(prayerName, timeStr);
-                    getLogger().info("[DEBUG] Successfully extracted " + prayerName + " prayer time: " + timeStr);
-                } else {
-                    // Fallback to direct string if the structure is different
-                    String timeStr = timings.get(prayerName).getAsString();
-                    prayerTimes.put(prayerName, timeStr);
-                    getLogger().info("[DEBUG] Extracted " + prayerName + " prayer time directly: " + timeStr);
+                // Get the prayer time as a simple string
+                String timeStr = timings.get(prayerName).getAsString();
+                
+                // Ensure we only store the time in HH:MM format
+                if (timeStr.length() > 5) {
+                    timeStr = timeStr.substring(0, 5);
                 }
+                
+                prayerTimes.put(prayerName, timeStr);
+                getLogger().info("[DEBUG] Successfully extracted " + prayerName + " prayer time: " + timeStr);
             } else {
                 getLogger().warning("[DEBUG] Missing prayer time for: " + prayerName);
             }
         } catch (Exception e) {
             getLogger().warning("[DEBUG] Error extracting " + prayerName + " prayer time: " + e.getMessage());
-            // Try alternative parsing method if the first one fails
-            try {
-                if (timings.has(prayerName)) {
-                    String timeStr = timings.get(prayerName).getAsString();
-                    prayerTimes.put(prayerName, timeStr);
-                    getLogger().info("[DEBUG] Successfully extracted " + prayerName + " prayer time using fallback method: " + timeStr);
-                }
-            } catch (Exception ex) {
-                getLogger().warning("[DEBUG] Fallback extraction also failed for " + prayerName + ": " + ex.getMessage());
-            }
         }
     }
 
