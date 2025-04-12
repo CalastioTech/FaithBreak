@@ -248,10 +248,9 @@ public final class FaithBreak extends JavaPlugin implements Listener {
                       ", Prayer total minutes: " + prayerTotalMinutes + 
                       ", Difference: " + (currentTotalMinutes - prayerTotalMinutes));
         
-        // Expand the window to 5 minutes to increase chances of catching prayer times
-        // Check if current time is within 5 minutes of prayer time
-        return currentTotalMinutes >= prayerTotalMinutes && 
-               currentTotalMinutes <= prayerTotalMinutes + 5;
+        // Create a window around the prayer time (2 minutes before and 5 minutes after)
+        // This increases the chance of catching prayer times and gives players a small window to prepare
+        return Math.abs(currentTotalMinutes - prayerTotalMinutes) <= 5;
     }
 
     private void kickPlayerForPrayer(Player player, String prayerName) {
@@ -419,20 +418,20 @@ public final class FaithBreak extends JavaPlugin implements Listener {
         getLogger().info("[DEBUG] Using fallback prayer times due to API failure");
         Map<String, String> fallbackTimes = new HashMap<>();
         
-        // Get current hour and add times around it for testing
+        // Get current time for testing
         LocalDateTime now = LocalDateTime.now();
         int currentHour = now.getHour();
         int currentMinute = now.getMinute();
         
-        // Create a prayer time 2 minutes in the future for testing
-        String testPrayerTime = String.format("%02d:%02d", currentHour, (currentMinute + 2) % 60);
-        getLogger().info("[DEBUG] Created test prayer time: " + testPrayerTime + " (current time + 2 minutes)");
+        // Create a test prayer time that's exactly the current time for immediate testing
+        String currentTimeStr = String.format("%02d:%02d", currentHour, currentMinute);
+        getLogger().info("[DEBUG] Created test prayer time matching current time: " + currentTimeStr);
         
         fallbackTimes.put("Fajr", "05:00");
         fallbackTimes.put("Dhuhr", "12:00");
         fallbackTimes.put("Asr", "15:30");
         fallbackTimes.put("Maghrib", "18:00");
-        fallbackTimes.put("Isha", testPrayerTime); // Use our test time for Isha
+        fallbackTimes.put("Isha", currentTimeStr); // Use current time for Isha to trigger the prayer break
         
         return fallbackTimes;
     }
