@@ -37,7 +37,7 @@ public final class FaithBreak extends JavaPlugin implements Listener {
     private final Set<UUID> processingPlayers = new HashSet<>();
     private BukkitTask prayerTimeChecker;
     private static final int PRAYER_BREAK_DURATION = 12 * 60 * 1000; // 12 minutes in milliseconds
-    private static final String KICK_MESSAGE = "§6If you're Muslim, prayer time is in 2 minutes. If you're not, take a 12-minute break.";
+    private static final String KICK_MESSAGE = "§6If you're Muslim, prayer time is probably in 2 minutes. If you're not, take a 12-minute break.😊♥❤";
 
     @Override
     public void onEnable() {
