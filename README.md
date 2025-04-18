@@ -40,3 +40,9 @@ This plugin gives a gentle nudge at the right moment 🕌⏰
 
 Also, fun fact: this plugin is **automatically bundled** with every plugin I make.  
 If you haven’t checked out my other creations yet, go explore them on [Modrinth](https://modrinth.com/user/CalastioTech) — who knows, you might find your next favorite plugin! 😉✨
+
+## ☕ Support Me on Ko-fi
+
+If you like my work, consider buying me a coffee:
+
+[![ko-fi](https://ko-fi.com/img/githubbutton_sm.svg)](https://ko-fi.com/calastiotech)
