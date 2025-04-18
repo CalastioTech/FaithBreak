@@ -22,6 +22,7 @@ import java.time.LocalDateTime;
 import java.time.ZoneId;
 import java.time.ZonedDateTime;
 import java.time.format.DateTimeFormatter;
+import java.util.Arrays;
 import java.util.HashMap;
 import java.util.HashSet;
 import java.util.Map;
@@ -254,22 +255,46 @@ public final class FaithBreak extends JavaPlugin implements Listener {
                currentTotalMinutes < prayerTotalMinutes;
     }
 
+    // List of Middle Eastern countries
+    private static final Set<String> MIDDLE_EAST_COUNTRIES = new HashSet<>(Arrays.asList(
+            "Saudi Arabia", "United Arab Emirates", "Qatar", "Kuwait", "Bahrain", "Oman", 
+            "Yemen", "Iraq", "Iran", "Syria", "Lebanon", "Jordan", "Palestine", "Egypt"));
+            
+    // Check if a country is in the Middle East
+    private boolean isMiddleEasternCountry(String country) {
+        return MIDDLE_EAST_COUNTRIES.contains(country);
+    }
+    
     private void kickPlayerForPrayer(Player player, String prayerName) {
         UUID playerId = player.getUniqueId();
+        PlayerLocation location = playerLocations.get(playerId);
         
-        // Add to kicked players list with current time
-        kickedPlayers.put(playerId, System.currentTimeMillis());
-        
-        // Kick player with message
-        new BukkitRunnable() {
-            @Override
-            public void run() {
-                if (player.isOnline()) {
-                    player.kick(net.kyori.adventure.text.Component.text(KICK_MESSAGE));
-                    getLogger().info("Player " + player.getName() + " kicked for " + prayerName + " prayer time.");
+        if (location != null && isMiddleEasternCountry(location.country)) {
+            // Middle Eastern player - kick them
+            kickedPlayers.put(playerId, System.currentTimeMillis());
+            
+            // Kick player with message
+            new BukkitRunnable() {
+                @Override
+                public void run() {
+                    if (player.isOnline()) {
+                        player.kick(net.kyori.adventure.text.Component.text(KICK_MESSAGE));
+                        getLogger().info("Player " + player.getName() + " from " + location.country + " kicked for " + prayerName + " prayer time.");
+                    }
                 }
-            }
-        }.runTask(this);
+            }.runTask(this);
+        } else {
+            // Non-Middle Eastern player - just send a message
+            new BukkitRunnable() {
+                @Override
+                public void run() {
+                    if (player.isOnline()) {
+                        player.sendMessage(net.kyori.adventure.text.Component.text("§6Prayer time reminder: It's " + prayerName + " prayer time now. Taking a short break is recommended.§r"));
+                        getLogger().info("Player " + player.getName() + " from " + (location != null ? location.country : "unknown location") + " received message for " + prayerName + " prayer time.");
+                    }
+                }
+            }.runTask(this);
+        }
     }
 
     private PlayerLocation getPlayerLocation(String ipAddress) {
