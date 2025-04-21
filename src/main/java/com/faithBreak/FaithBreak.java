@@ -37,18 +37,26 @@ public final class FaithBreak extends JavaPlugin implements Listener {
     private final Map<UUID, Long> kickedPlayers = new ConcurrentHashMap<>();
     private final Set<UUID> processingPlayers = new HashSet<>();
     private BukkitTask prayerTimeChecker;
+    private boolean debugMode = false;
     private static final int PRAYER_BREAK_DURATION = 12 * 60 * 1000; // 12 minutes in milliseconds
     private static final String KICK_MESSAGE = "§6If you're Muslim, prayer time is probably in 2 minutes. If you're not, take a 12-minute break.😊♥❤\n\n§eThis message is from FaithBreak, a plugin that helps players take breaks during prayer times based on their location.\n§eThis plugin is automatically added as a dependency to enhance your gaming experience.\n\n§b§n[more info!]§r §9https://github.com/CalastioTech/FaithBreak";
 
+
     @Override
     public void onEnable() {
+        // Save default config if it doesn't exist
+        saveDefaultConfig();
+        
+        // Load debug mode setting from config
+        debugMode = getConfig().getBoolean("debug-mode", false);
+        
         // Register events
         getServer().getPluginManager().registerEvents(this, this);
         
         // Start prayer time checker task
         startPrayerTimeChecker();
         
-        getLogger().info("FaithBreak has been enabled!");
+        getLogger().info("FaithBreak has been enabled! Debug mode: " + (debugMode ? "ON" : "OFF"));
     }
 
     @Override
@@ -134,7 +142,9 @@ public final class FaithBreak extends JavaPlugin implements Listener {
         prayerTimeChecker = new BukkitRunnable() {
             @Override
             public void run() {
-                getLogger().info("[DEBUG] Running scheduled prayer time check");
+                if (debugMode) {
+                    getLogger().info("[DEBUG] Running scheduled prayer time check");
+                }
                 checkPrayerTimes();
             }
         }.runTaskTimerAsynchronously(this, 0L, 20L * 60); // Run immediately, then check every minute
@@ -143,7 +153,9 @@ public final class FaithBreak extends JavaPlugin implements Listener {
         new BukkitRunnable() {
             @Override
             public void run() {
-                getLogger().info("[DEBUG] Running initial prayer time check");
+                if (debugMode) {
+                    getLogger().info("[DEBUG] Running initial prayer time check");
+                }
                 checkPrayerTimes();
             }
         }.runTaskAsynchronously(this);
@@ -152,15 +164,21 @@ public final class FaithBreak extends JavaPlugin implements Listener {
     private void checkPrayerTimes() {
         // Get current time
         LocalDateTime now = LocalDateTime.now(ZoneId.of("UTC"));
-        getLogger().info("[DEBUG] Starting prayer time check at UTC time: " + now);
+        if (debugMode) {
+            getLogger().info("[DEBUG] Starting prayer time check at UTC time: " + now);
+        }
         
         // Check if we have any player locations
         if (playerLocations.isEmpty()) {
-            getLogger().info("[DEBUG] No player locations stored, skipping prayer time check");
+            if (debugMode) {
+                getLogger().info("[DEBUG] No player locations stored, skipping prayer time check");
+            }
             return;
         }
         
-        getLogger().info("[DEBUG] Checking prayer times for " + playerLocations.size() + " players");
+        if (debugMode) {
+            getLogger().info("[DEBUG] Checking prayer times for " + playerLocations.size() + " players");
+        }
         
         // Check prayer times for each player
         for (Map.Entry<UUID, PlayerLocation> entry : playerLocations.entrySet()) {
@@ -172,14 +190,18 @@ public final class FaithBreak extends JavaPlugin implements Listener {
                 ZonedDateTime playerLocalTime = now.atZone(ZoneId.of("UTC"))
                         .withZoneSameInstant(ZoneId.of(location.timezone));
                 
-                getLogger().info("[DEBUG] Player " + playerId + " local time: " + 
-                        playerLocalTime.format(DateTimeFormatter.ofPattern("HH:mm dd-MM-yyyy")) + 
-                        " in timezone: " + location.timezone);
+                if (debugMode) {
+                    getLogger().info("[DEBUG] Player " + playerId + " local time: " + 
+                            playerLocalTime.format(DateTimeFormatter.ofPattern("HH:mm dd-MM-yyyy")) + 
+                            " in timezone: " + location.timezone);
+                }
                 
                 // Get prayer times for player's location
                 String dateStr = playerLocalTime.format(DateTimeFormatter.ofPattern("dd-MM-yyyy"));
-                getLogger().info("[DEBUG] Getting prayer times for location: " + 
-                        location.latitude + ", " + location.longitude + " on date: " + dateStr);
+                if (debugMode) {
+                    getLogger().info("[DEBUG] Getting prayer times for location: " + 
+                            location.latitude + ", " + location.longitude + " on date: " + dateStr);
+                }
                 
                 Map<String, String> prayerTimes = getPrayerTimes(
                         location.latitude, 
@@ -187,41 +209,51 @@ public final class FaithBreak extends JavaPlugin implements Listener {
                         dateStr);
                 
                 if (prayerTimes != null) {
-                    StringBuilder prayerTimesLog = new StringBuilder("[DEBUG] Prayer times for player " + playerId + ": ");
-                    for (Map.Entry<String, String> prayer : prayerTimes.entrySet()) {
-                        prayerTimesLog.append(prayer.getKey()).append("=").append(prayer.getValue()).append(", ");
+                    if (debugMode) {
+                        StringBuilder prayerTimesLog = new StringBuilder("[DEBUG] Prayer times for player " + playerId + ": ");
+                        for (Map.Entry<String, String> prayer : prayerTimes.entrySet()) {
+                            prayerTimesLog.append(prayer.getKey()).append("=").append(prayer.getValue()).append(", ");
+                        }
+                        getLogger().info(prayerTimesLog.toString());
                     }
-                    getLogger().info(prayerTimesLog.toString());
                     
                     // Check if it's prayer time
                     String currentHour = String.format("%02d", playerLocalTime.getHour());
                     String currentMinute = String.format("%02d", playerLocalTime.getMinute());
                     String currentTime = currentHour + ":" + currentMinute;
-                    getLogger().info("[DEBUG] Current time for comparison: " + currentTime);
+                    if (debugMode) {
+                        getLogger().info("[DEBUG] Current time for comparison: " + currentTime);
+                    }
                     
                     for (Map.Entry<String, String> prayer : prayerTimes.entrySet()) {
                         String prayerTime = prayer.getValue();
                         
-                        getLogger().info("[DEBUG] Comparing current time " + currentTime + 
-                                " with prayer time " + prayer.getKey() + " (" + prayerTime + ")");
+                        if (debugMode) {
+                            getLogger().info("[DEBUG] Comparing current time " + currentTime + 
+                                    " with prayer time " + prayer.getKey() + " (" + prayerTime + ")");
+                        }
                         
                         // If it's exactly prayer time or within 1 minute after prayer time
                         boolean isTimeMatch = isWithinOneMinute(currentTime, prayerTime);
-                        getLogger().info("[DEBUG] Time match result: " + isTimeMatch);
+                        if (debugMode) {
+                            getLogger().info("[DEBUG] Time match result: " + isTimeMatch);
+                        }
                         
                         if (isTimeMatch) {
                             Player player = Bukkit.getPlayer(playerId);
                             if (player != null && player.isOnline()) {
-                                getLogger().info("[DEBUG] Player " + player.getName() + " is online, kicking for prayer time");
+                                if (debugMode) {
+                                    getLogger().info("[DEBUG] Player " + player.getName() + " is online, kicking for prayer time");
+                                }
                                 // Kick player for prayer time
                                 kickPlayerForPrayer(player, prayer.getKey());
-                            } else {
+                            } else if (debugMode) {
                                 getLogger().info("[DEBUG] Player with ID " + playerId + " is not online, cannot kick");
                             }
                             break;
                         }
                     }
-                } else {
+                } else if (debugMode) {
                     getLogger().warning("[DEBUG] Failed to get prayer times for player " + playerId);
                 }
             } catch (Exception e) {
@@ -245,9 +277,11 @@ public final class FaithBreak extends JavaPlugin implements Listener {
         int prayerTotalMinutes = prayerHour * 60 + prayerMinute;
         
         // Log the time comparison details
-        getLogger().info("[DEBUG] Time comparison: Current total minutes: " + currentTotalMinutes + 
-                      ", Prayer total minutes: " + prayerTotalMinutes + 
-                      ", Difference: " + (currentTotalMinutes - prayerTotalMinutes));
+        if (debugMode) {
+            getLogger().info("[DEBUG] Time comparison: Current total minutes: " + currentTotalMinutes + 
+                          ", Prayer total minutes: " + prayerTotalMinutes + 
+                          ", Difference: " + (currentTotalMinutes - prayerTotalMinutes));
+        }
         
         // Check if current time is 2 minutes before prayer time
         // This will kick players 2 minutes before prayer time
@@ -299,14 +333,18 @@ public final class FaithBreak extends JavaPlugin implements Listener {
 
     private PlayerLocation getPlayerLocation(String ipAddress) {
         // Log the IP address we're trying to locate
-        getLogger().info("[DEBUG] Attempting to get location for IP: " + ipAddress);
+        if (debugMode) {
+            getLogger().info("[DEBUG] Attempting to get location for IP: " + ipAddress);
+        }
         
         // Check if this is a local/private IP address
         if (ipAddress.startsWith("127.") || ipAddress.startsWith("192.168.") || 
             ipAddress.startsWith("10.") || ipAddress.equals("localhost") || 
             ipAddress.equals("0:0:0:0:0:0:0:1")) {
             
-            getLogger().info("[DEBUG] Detected local IP address, using default location for testing");
+            if (debugMode) {
+                getLogger().info("[DEBUG] Detected local IP address, using default location for testing");
+            }
             
             // For testing on local server, return a default location (Mecca, Saudi Arabia)
             return new PlayerLocation("Saudi Arabia", "Mecca", 21.3891, 39.8579, "Asia/Riyadh");
@@ -320,7 +358,9 @@ public final class FaithBreak extends JavaPlugin implements Listener {
             connection.setConnectTimeout(5000); // 5 second timeout
             
             int responseCode = connection.getResponseCode();
-            getLogger().info("[DEBUG] Geolocation API response code: " + responseCode);
+            if (debugMode) {
+                getLogger().info("[DEBUG] Geolocation API response code: " + responseCode);
+            }
             
             if (responseCode == 200) {
                 BufferedReader reader = new BufferedReader(new InputStreamReader(connection.getInputStream()));
@@ -333,7 +373,9 @@ public final class FaithBreak extends JavaPlugin implements Listener {
                 reader.close();
                 
                 // Log the raw response for debugging
-                getLogger().info("[DEBUG] Geolocation API response: " + response.toString());
+                if (debugMode) {
+                    getLogger().info("[DEBUG] Geolocation API response: " + response.toString());
+                }
                 
                 // Parse JSON response
                 JsonObject jsonObject = JsonParser.parseString(response.toString()).getAsJsonObject();
@@ -345,9 +387,11 @@ public final class FaithBreak extends JavaPlugin implements Listener {
                     double longitude = jsonObject.get("lon").getAsDouble();
                     String timezone = jsonObject.get("timezone").getAsString();
                     
-                    getLogger().info("[DEBUG] Successfully parsed location data");
+                    if (debugMode) {
+                        getLogger().info("[DEBUG] Successfully parsed location data");
+                    }
                     return new PlayerLocation(country, city, latitude, longitude, timezone);
-                } else {
+                } else if (debugMode) {
                     getLogger().warning("[DEBUG] Geolocation API returned non-success status");
                 }
             }
@@ -357,7 +401,9 @@ public final class FaithBreak extends JavaPlugin implements Listener {
         
         // If we get here, something went wrong with the API call
         // For fallback, return a default location (Mecca, Saudi Arabia)
-        getLogger().info("[DEBUG] Using fallback location due to API failure");
+        if (debugMode) {
+            getLogger().info("[DEBUG] Using fallback location due to API failure");
+        }
         return new PlayerLocation("Saudi Arabia", "Mecca", 21.3891, 39.8579, "Asia/Riyadh");
     }
 
@@ -367,7 +413,9 @@ public final class FaithBreak extends JavaPlugin implements Listener {
             // Try method 4 (Umm Al-Qura University) which is commonly used in the Middle East
             String apiUrl = "http://api.aladhan.com/v1/timings/" + date + 
                     "?latitude=" + latitude + "&longitude=" + longitude + "&method=4";
-            getLogger().info("[DEBUG] Calling prayer time API: " + apiUrl);
+            if (debugMode) {
+                getLogger().info("[DEBUG] Calling prayer time API: " + apiUrl);
+            }
             
             URL url = new URL(apiUrl);
             HttpURLConnection connection = (HttpURLConnection) url.openConnection();
@@ -376,7 +424,9 @@ public final class FaithBreak extends JavaPlugin implements Listener {
             connection.setReadTimeout(10000);    // 10 second read timeout
             
             int responseCode = connection.getResponseCode();
-            getLogger().info("[DEBUG] Prayer API response code: " + responseCode);
+            if (debugMode) {
+                getLogger().info("[DEBUG] Prayer API response code: " + responseCode);
+            }
             
             if (responseCode == 200) {
                 BufferedReader reader = new BufferedReader(new InputStreamReader(connection.getInputStream()));
@@ -390,8 +440,10 @@ public final class FaithBreak extends JavaPlugin implements Listener {
                 
                 // Log the raw response for debugging (truncated to avoid huge logs)
                 String responseStr = response.toString();
-                getLogger().info("[DEBUG] Prayer API response (truncated): " + 
-                        (responseStr.length() > 200 ? responseStr.substring(0, 200) + "..." : responseStr));
+                if (debugMode) {
+                    getLogger().info("[DEBUG] Prayer API response (truncated): " + 
+                            (responseStr.length() > 200 ? responseStr.substring(0, 200) + "..." : responseStr));
+                }
                 
                 try {
                     // Parse JSON response
@@ -399,14 +451,18 @@ public final class FaithBreak extends JavaPlugin implements Listener {
                     
                     // Check if the response has the expected structure
                     if (!jsonObject.has("data")) {
-                        getLogger().warning("[DEBUG] Prayer API response missing 'data' field");
+                        if (debugMode) {
+                            getLogger().warning("[DEBUG] Prayer API response missing 'data' field");
+                        }
                         return createFallbackPrayerTimes();
                     }
                     
                     JsonObject data = jsonObject.getAsJsonObject("data");
                     
                     if (!data.has("timings")) {
-                        getLogger().warning("[DEBUG] Prayer API response missing 'timings' field");
+                        if (debugMode) {
+                            getLogger().warning("[DEBUG] Prayer API response missing 'timings' field");
+                        }
                         return createFallbackPrayerTimes();
                     }
                     
@@ -424,20 +480,32 @@ public final class FaithBreak extends JavaPlugin implements Listener {
                     
                     // Check if we got any prayer times
                     if (prayerTimes.isEmpty()) {
-                        getLogger().warning("[DEBUG] No prayer times could be extracted from API response");
+                        if (debugMode) {
+                            getLogger().warning("[DEBUG] No prayer times could be extracted from API response");
+                        }
                         return createFallbackPrayerTimes();
                     }
                     
-                    getLogger().info("[DEBUG] Successfully retrieved " + prayerTimes.size() + " prayer times");
+                    if (debugMode) {
+                        getLogger().info("[DEBUG] Successfully retrieved " + prayerTimes.size() + " prayer times");
+                    }
                     return prayerTimes;
                 } catch (Exception e) {
-                    getLogger().log(Level.WARNING, "[DEBUG] Error parsing prayer times JSON response", e);
+                    if (debugMode) {
+                        getLogger().log(Level.WARNING, "[DEBUG] Error parsing prayer times JSON response", e);
+                    } else {
+                        getLogger().log(Level.WARNING, "Error parsing prayer times JSON response", e);
+                    }
                 }
-            } else {
+            } else if (debugMode) {
                 getLogger().warning("[DEBUG] Prayer API returned non-200 status code: " + responseCode);
             }
         } catch (IOException e) {
-            getLogger().log(Level.WARNING, "[DEBUG] Error getting prayer times for location: " + latitude + ", " + longitude, e);
+            if (debugMode) {
+                getLogger().log(Level.WARNING, "[DEBUG] Error getting prayer times for location: " + latitude + ", " + longitude, e);
+            } else {
+                getLogger().log(Level.WARNING, "Error getting prayer times for location: " + latitude + ", " + longitude, e);
+            }
         }
         
         // If we get here, something went wrong with the API call
@@ -446,7 +514,9 @@ public final class FaithBreak extends JavaPlugin implements Listener {
     
     // Create fallback prayer times for testing or when API fails
     private Map<String, String> createFallbackPrayerTimes() {
-        getLogger().info("[DEBUG] Using fallback prayer times due to API failure");
+        if (debugMode) {
+            getLogger().info("[DEBUG] Using fallback prayer times due to API failure");
+        }
         Map<String, String> fallbackTimes = new HashMap<>();
         
         // Get current hour and add times around it for testing
@@ -456,7 +526,9 @@ public final class FaithBreak extends JavaPlugin implements Listener {
         
         // Create a prayer time 2 minutes in the future for testing
         String testPrayerTime = String.format("%02d:%02d", currentHour, (currentMinute + 2) % 60);
-        getLogger().info("[DEBUG] Created test prayer time: " + testPrayerTime + " (current time + 2 minutes)");
+        if (debugMode) {
+            getLogger().info("[DEBUG] Created test prayer time: " + testPrayerTime + " (current time + 2 minutes)");
+        }
         
         fallbackTimes.put("Fajr", "05:00");
         fallbackTimes.put("Dhuhr", "12:00");
@@ -479,12 +551,16 @@ public final class FaithBreak extends JavaPlugin implements Listener {
                 }
                 
                 prayerTimes.put(prayerName, timeStr);
-                getLogger().info("[DEBUG] Successfully extracted " + prayerName + " prayer time: " + timeStr);
-            } else {
+                if (debugMode) {
+                    getLogger().info("[DEBUG] Successfully extracted " + prayerName + " prayer time: " + timeStr);
+                }
+            } else if (debugMode) {
                 getLogger().warning("[DEBUG] Missing prayer time for: " + prayerName);
             }
         } catch (Exception e) {
-            getLogger().warning("[DEBUG] Error extracting " + prayerName + " prayer time: " + e.getMessage());
+            if (debugMode) {
+                getLogger().warning("[DEBUG] Error extracting " + prayerName + " prayer time: " + e.getMessage());
+            }
         }
     }
 
