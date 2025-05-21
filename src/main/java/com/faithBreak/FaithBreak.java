@@ -38,7 +38,6 @@ public final class FaithBreak extends JavaPlugin implements Listener {
     private final Set<UUID> processingPlayers = new HashSet<>();
     private BukkitTask prayerTimeChecker;
     private boolean debugMode = false;
-    private TranslationService translationService;
     private static final int PRAYER_BREAK_DURATION = 12 * 60 * 1000; // 12 minutes in milliseconds
     private static final String KICK_MESSAGE = "§6If you're Muslim, prayer time is probably in 2 minutes. If you're not, take a 12-minute break.😊♥❤\n\n§eThis message is from FaithBreak, a plugin that helps players take breaks during prayer times based on their location.\n§eThis plugin is automatically added as a dependency to enhance your gaming experience.\n\n§b§n[more info!]§r §9https://github.com/CalastioTech/FaithBreak";
 
@@ -50,9 +49,6 @@ public final class FaithBreak extends JavaPlugin implements Listener {
         
         // Load debug mode setting from config
         debugMode = getConfig().getBoolean("debug-mode", false);
-        
-        // Initialize translation service
-        translationService = new TranslationService(this);
         
         // Register events
         getServer().getPluginManager().registerEvents(this, this);

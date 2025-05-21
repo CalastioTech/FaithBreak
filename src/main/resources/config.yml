@@ -3,34 +3,3 @@
 # Debug mode - when set to true, detailed debug messages will be logged to console
 # Set to false to prevent console spam during normal operation
 debug-mode: false
-
-# Translation Settings
-# Choose which translation service to use: 'google' or 'deepl'
-translation-service: 'google'
-
-# Google Cloud Translation API Settings
-# To get an API key:
-# 1. Go to https://console.cloud.google.com
-# 2. Create a new project or select an existing one
-# 3. Enable the Cloud Translation API
-# 4. Go to Credentials and create an API key
-# 5. Copy the API key and paste it below
-google-translate-api-key: ''
-
-# DeepL API Settings
-# To get an API key:
-# 1. Go to https://www.deepl.com/pro-api
-# 2. Sign up for a DeepL API account
-# 3. Copy your API key from the account dashboard
-# 4. Paste it below
-deepl-api-key: ''
-
-# Default language to use if IP-based detection fails
-default-language: 'en'
-
-# Cache translated messages to reduce API calls
-# Messages will be cached for this many minutes
-translation-cache-duration: 60
-
-# Fallback to default language if translation fails
-fallback-to-default: true
