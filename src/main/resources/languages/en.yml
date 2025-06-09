@@ -1,0 +1,3 @@
+kick_message: "You have been kicked for: {0}"
+rejoin_warning: "Please wait {0} more minutes before rejoining."
+prayer_reminder: "§6Prayer time reminder: It's {0} prayer time now. Taking a short break is recommended.§r"

@@ -38,8 +38,8 @@ public final class FaithBreak extends JavaPlugin implements Listener {
     private final Set<UUID> processingPlayers = new HashSet<>();
     private BukkitTask prayerTimeChecker;
     private boolean debugMode = false;
+    private TranslationService translationService;
     private static final int PRAYER_BREAK_DURATION = 12 * 60 * 1000; // 12 minutes in milliseconds
-    private static final String KICK_MESSAGE = "§6If you're Muslim, prayer time is probably in 2 minutes. If you're not, take a 12-minute break.😊♥❤\n\n§eThis message is from FaithBreak, a plugin that helps players take breaks during prayer times based on their location.\n§eThis plugin is automatically added as a dependency to enhance your gaming experience.\n\n§b§n[more info!]§r §9https://github.com/CalastioTech/FaithBreak";
 
 
     @Override
@@ -49,6 +49,9 @@ public final class FaithBreak extends JavaPlugin implements Listener {
         
         // Load debug mode setting from config
         debugMode = getConfig().getBoolean("debug-mode", false);
+        
+        // Initialize translation service
+        translationService = new TranslationService(this);
         
         // Register events
         getServer().getPluginManager().registerEvents(this, this);
@@ -82,8 +85,10 @@ public final class FaithBreak extends JavaPlugin implements Listener {
             if (currentTime - kickTime < PRAYER_BREAK_DURATION) {
                 // Break time hasn't passed yet, kick the player again
                 long remainingTime = (kickTime + PRAYER_BREAK_DURATION - currentTime) / 1000 / 60;
+                String kickMsg = translationService.getMessage(player, "kick_message", "prayer time");
+                String rejoinMsg = translationService.getMessage(player, "rejoin_warning", String.valueOf(remainingTime));
                 player.kick(net.kyori.adventure.text.Component.text(
-                        KICK_MESSAGE + "\n§cPlease wait " + remainingTime + " more minutes before rejoining."));
+                        kickMsg + "\n§c" + rejoinMsg));
                 return;
             } else {
                 // Break time has passed, remove from kicked list
@@ -127,9 +132,11 @@ public final class FaithBreak extends JavaPlugin implements Listener {
             if (currentTime - kickTime < PRAYER_BREAK_DURATION) {
                 // Break time hasn't passed yet, deny login
                 long remainingTime = (kickTime + PRAYER_BREAK_DURATION - currentTime) / 1000 / 60;
+                String kickMsg = translationService.getMessage(player, "kick_message", "prayer time");
+                String rejoinMsg = translationService.getMessage(player, "rejoin_warning", String.valueOf(remainingTime));
                 event.disallow(PlayerLoginEvent.Result.KICK_OTHER, 
-                        net.kyori.adventure.text.Component.text(KICK_MESSAGE + 
-                        "\n§cPlease wait " + remainingTime + " more minutes before rejoining."));
+                        net.kyori.adventure.text.Component.text(kickMsg + 
+                        "\n§c" + rejoinMsg));
             } else {
                 // Break time has passed, remove from kicked list
                 kickedPlayers.remove(playerId);
@@ -312,7 +319,8 @@ public final class FaithBreak extends JavaPlugin implements Listener {
                 @Override
                 public void run() {
                     if (player.isOnline()) {
-                        player.kick(net.kyori.adventure.text.Component.text(KICK_MESSAGE));
+                        String kickMsg = translationService.getMessage(player, "kick_message", prayerName);
+                        player.kick(net.kyori.adventure.text.Component.text(kickMsg));
                         getLogger().info("Player " + player.getName() + " from " + location.country + " kicked for " + prayerName + " prayer time.");
                     }
                 }
@@ -323,7 +331,8 @@ public final class FaithBreak extends JavaPlugin implements Listener {
                 @Override
                 public void run() {
                     if (player.isOnline()) {
-                        player.sendMessage(net.kyori.adventure.text.Component.text("§6Prayer time reminder: It's " + prayerName + " prayer time now. Taking a short break is recommended.§r"));
+                        String reminderMsg = translationService.getMessage(player, "prayer_reminder", prayerName);
+                        player.sendMessage(net.kyori.adventure.text.Component.text(reminderMsg));
                         getLogger().info("Player " + player.getName() + " from " + (location != null ? location.country : "unknown location") + " received message for " + prayerName + " prayer time.");
                     }
                 }
