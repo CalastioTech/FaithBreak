@@ -36,10 +36,13 @@ public final class FaithBreak extends JavaPlugin implements Listener {
     private final Map<UUID, PlayerLocation> playerLocations = new ConcurrentHashMap<>();
     private final Map<UUID, Long> kickedPlayers = new ConcurrentHashMap<>();
     private final Set<UUID> processingPlayers = new HashSet<>();
+    private final Map<String, PlayerLocation> ipLocationCache = new ConcurrentHashMap<>();
+    private final Map<String, Long> ipCacheTimestamps = new ConcurrentHashMap<>();
     private BukkitTask prayerTimeChecker;
     private boolean debugMode = false;
     private TranslationService translationService;
     private static final int PRAYER_BREAK_DURATION = 12 * 60 * 1000; // 12 minutes in milliseconds
+    private static final long LOCATION_CACHE_DURATION = 24 * 60 * 60 * 1000; // 24 hours in milliseconds
 
 
     @Override
@@ -192,6 +195,14 @@ public final class FaithBreak extends JavaPlugin implements Listener {
             UUID playerId = entry.getKey();
             PlayerLocation location = entry.getValue();
             
+            // Skip players with null locations (local connections or failed geolocation)
+            if (location == null) {
+                if (debugMode) {
+                    getLogger().info("[DEBUG] Skipping player " + playerId + " - no valid location data");
+                }
+                continue;
+            }
+            
             try {
                 // Convert UTC time to player's local time
                 ZonedDateTime playerLocalTime = now.atZone(ZoneId.of("UTC"))
@@ -340,6 +351,23 @@ public final class FaithBreak extends JavaPlugin implements Listener {
         }
     }
 
+    private boolean isLocalOrPrivateIP(String ipAddress) {
+        return ipAddress.startsWith("127.") || 
+               ipAddress.startsWith("192.168.") || 
+               ipAddress.startsWith("10.") || 
+               ipAddress.startsWith("172.16.") || ipAddress.startsWith("172.17.") || 
+               ipAddress.startsWith("172.18.") || ipAddress.startsWith("172.19.") || 
+               ipAddress.startsWith("172.20.") || ipAddress.startsWith("172.21.") || 
+               ipAddress.startsWith("172.22.") || ipAddress.startsWith("172.23.") || 
+               ipAddress.startsWith("172.24.") || ipAddress.startsWith("172.25.") || 
+               ipAddress.startsWith("172.26.") || ipAddress.startsWith("172.27.") || 
+               ipAddress.startsWith("172.28.") || ipAddress.startsWith("172.29.") || 
+               ipAddress.startsWith("172.30.") || ipAddress.startsWith("172.31.") || 
+               ipAddress.equals("localhost") || 
+               ipAddress.equals("0:0:0:0:0:0:0:1") ||
+               ipAddress.equals("::1");
+    }
+
     private PlayerLocation getPlayerLocation(String ipAddress) {
         // Log the IP address we're trying to locate
         if (debugMode) {
@@ -347,28 +375,109 @@ public final class FaithBreak extends JavaPlugin implements Listener {
         }
         
         // Check if this is a local/private IP address
-        if (ipAddress.startsWith("127.") || ipAddress.startsWith("192.168.") || 
-            ipAddress.startsWith("10.") || ipAddress.equals("localhost") || 
-            ipAddress.equals("0:0:0:0:0:0:0:1")) {
-            
-            if (debugMode) {
-                getLogger().info("[DEBUG] Detected local IP address, using default location for testing");
-            }
-            
-            // For testing on local server, return a default location (Mecca, Saudi Arabia)
-            return new PlayerLocation("Saudi Arabia", "Mecca", 21.3891, 39.8579, "Asia/Riyadh");
+        if (isLocalOrPrivateIP(ipAddress)) {
+            getLogger().info("Player connecting from local/private network (" + ipAddress + ") - plugin functionality disabled for this player");
+            return null; // Return null to disable plugin functionality for local connections
         }
         
+        // Check cache first
+        if (ipLocationCache.containsKey(ipAddress) && ipCacheTimestamps.containsKey(ipAddress)) {
+            long cacheTime = ipCacheTimestamps.get(ipAddress);
+            long currentTime = System.currentTimeMillis();
+            
+            if (currentTime - cacheTime < LOCATION_CACHE_DURATION) {
+                PlayerLocation cachedLocation = ipLocationCache.get(ipAddress);
+                if (debugMode) {
+                    getLogger().info("[DEBUG] Using cached location for IP: " + ipAddress + 
+                            " (cached " + ((currentTime - cacheTime) / 1000 / 60) + " minutes ago)");
+                }
+                return cachedLocation;
+            } else {
+                // Cache expired, remove old entries
+                if (debugMode) {
+                    getLogger().info("[DEBUG] Cache expired for IP: " + ipAddress + ", removing from cache");
+                }
+                ipLocationCache.remove(ipAddress);
+                ipCacheTimestamps.remove(ipAddress);
+            }
+        }
+        
+        // Try multiple geolocation services in order
+        PlayerLocation location = tryIpApiService(ipAddress);
+        if (location != null) {
+            cacheLocationResult(ipAddress, location);
+            return location;
+        }
+        
+        location = tryIpInfoService(ipAddress);
+        if (location != null) {
+            cacheLocationResult(ipAddress, location);
+            return location;
+        }
+        
+        location = tryIpGeolocationService(ipAddress);
+        if (location != null) {
+            cacheLocationResult(ipAddress, location);
+            return location;
+        }
+        
+        // All APIs failed - cache null result for a shorter time to avoid repeated API calls
+        cacheLocationResult(ipAddress, null);
+        getLogger().warning("All geolocation services failed for IP: " + ipAddress + " - plugin functionality disabled for this player");
+        return null; // Return null instead of fake location
+    }
+    
+    private void cacheLocationResult(String ipAddress, PlayerLocation location) {
+        long currentTime = System.currentTimeMillis();
+        ipLocationCache.put(ipAddress, location);
+        ipCacheTimestamps.put(ipAddress, currentTime);
+        
+        if (debugMode) {
+            if (location != null) {
+                getLogger().info("[DEBUG] Cached location result for IP: " + ipAddress + 
+                        " -> " + location.country + ", " + location.city);
+            } else {
+                getLogger().info("[DEBUG] Cached null location result for IP: " + ipAddress);
+            }
+        }
+        
+        // Clean up old cache entries periodically
+        cleanupExpiredCacheEntries();
+    }
+    
+    private void cleanupExpiredCacheEntries() {
+        long currentTime = System.currentTimeMillis();
+        
+        // Only clean up occasionally to avoid performance impact
+        if (currentTime % 100000 < 1000) { // Roughly every 100 seconds
+            ipCacheTimestamps.entrySet().removeIf(entry -> {
+                boolean expired = currentTime - entry.getValue() > LOCATION_CACHE_DURATION;
+                if (expired) {
+                    ipLocationCache.remove(entry.getKey());
+                    if (debugMode) {
+                        getLogger().info("[DEBUG] Cleaned up expired cache entry for IP: " + entry.getKey());
+                    }
+                }
+                return expired;
+            });
+        }
+    }
+    
+    private PlayerLocation tryIpApiService(String ipAddress) {
         try {
-            // Use ip-api.com for geolocation (free service)
+            if (debugMode) {
+                getLogger().info("[DEBUG] Trying ip-api.com service for IP: " + ipAddress);
+            }
+            
             URL url = new URL("http://ip-api.com/json/" + ipAddress + "?fields=status,country,city,lat,lon,timezone");
             HttpURLConnection connection = (HttpURLConnection) url.openConnection();
             connection.setRequestMethod("GET");
-            connection.setConnectTimeout(5000); // 5 second timeout
+            connection.setConnectTimeout(10000); // Increased timeout to 10 seconds
+            connection.setReadTimeout(10000);
             
             int responseCode = connection.getResponseCode();
             if (debugMode) {
-                getLogger().info("[DEBUG] Geolocation API response code: " + responseCode);
+                getLogger().info("[DEBUG] ip-api.com response code: " + responseCode);
             }
             
             if (responseCode == 200) {
@@ -383,7 +492,7 @@ public final class FaithBreak extends JavaPlugin implements Listener {
                 
                 // Log the raw response for debugging
                 if (debugMode) {
-                    getLogger().info("[DEBUG] Geolocation API response: " + response.toString());
+                    getLogger().info("[DEBUG] ip-api.com response: " + response.toString());
                 }
                 
                 // Parse JSON response
@@ -396,24 +505,197 @@ public final class FaithBreak extends JavaPlugin implements Listener {
                     double longitude = jsonObject.get("lon").getAsDouble();
                     String timezone = jsonObject.get("timezone").getAsString();
                     
-                    if (debugMode) {
-                        getLogger().info("[DEBUG] Successfully parsed location data");
+                    // Validate location data
+                    if (isValidLocationData(country, city, latitude, longitude, timezone)) {
+                        if (debugMode) {
+                            getLogger().info("[DEBUG] Successfully got valid location from ip-api.com");
+                        }
+                        return new PlayerLocation(country, city, latitude, longitude, timezone);
+                    } else {
+                        if (debugMode) {
+                            getLogger().warning("[DEBUG] Invalid location data from ip-api.com");
+                        }
                     }
-                    return new PlayerLocation(country, city, latitude, longitude, timezone);
-                } else if (debugMode) {
-                    getLogger().warning("[DEBUG] Geolocation API returned non-success status");
+                } else {
+                    if (debugMode) {
+                        getLogger().warning("[DEBUG] ip-api.com returned non-success status");
+                    }
+                }
+            } else {
+                if (debugMode) {
+                    getLogger().warning("[DEBUG] ip-api.com returned HTTP " + responseCode);
                 }
             }
         } catch (IOException e) {
-            getLogger().log(Level.WARNING, "Error getting location for IP: " + ipAddress, e);
+            if (debugMode) {
+                getLogger().log(Level.WARNING, "[DEBUG] Error with ip-api.com service for IP: " + ipAddress, e);
+            } else {
+                getLogger().log(Level.WARNING, "Error with ip-api.com service for IP: " + ipAddress, e);
+            }
         }
         
-        // If we get here, something went wrong with the API call
-        // For fallback, return a default location (Mecca, Saudi Arabia)
-        if (debugMode) {
-            getLogger().info("[DEBUG] Using fallback location due to API failure");
+        return null;
+    }
+    
+    private PlayerLocation tryIpInfoService(String ipAddress) {
+        try {
+            if (debugMode) {
+                getLogger().info("[DEBUG] Trying ipinfo.io service for IP: " + ipAddress);
+            }
+            
+            URL url = new URL("http://ipinfo.io/" + ipAddress + "/json");
+            HttpURLConnection connection = (HttpURLConnection) url.openConnection();
+            connection.setRequestMethod("GET");
+            connection.setConnectTimeout(10000);
+            connection.setReadTimeout(10000);
+            
+            int responseCode = connection.getResponseCode();
+            if (debugMode) {
+                getLogger().info("[DEBUG] ipinfo.io response code: " + responseCode);
+            }
+            
+            if (responseCode == 200) {
+                BufferedReader reader = new BufferedReader(new InputStreamReader(connection.getInputStream()));
+                StringBuilder response = new StringBuilder();
+                String line;
+                
+                while ((line = reader.readLine()) != null) {
+                    response.append(line);
+                }
+                reader.close();
+                
+                if (debugMode) {
+                    getLogger().info("[DEBUG] ipinfo.io response: " + response.toString());
+                }
+                
+                JsonObject jsonObject = JsonParser.parseString(response.toString()).getAsJsonObject();
+                
+                if (jsonObject.has("country") && jsonObject.has("city") && jsonObject.has("loc")) {
+                    String country = jsonObject.get("country").getAsString();
+                    String city = jsonObject.get("city").getAsString();
+                    String[] coords = jsonObject.get("loc").getAsString().split(",");
+                    
+                    if (coords.length == 2) {
+                        double latitude = Double.parseDouble(coords[0]);
+                        double longitude = Double.parseDouble(coords[1]);
+                        String timezone = jsonObject.has("timezone") ? jsonObject.get("timezone").getAsString() : "UTC";
+                        
+                        if (isValidLocationData(country, city, latitude, longitude, timezone)) {
+                            if (debugMode) {
+                                getLogger().info("[DEBUG] Successfully got valid location from ipinfo.io");
+                            }
+                            return new PlayerLocation(country, city, latitude, longitude, timezone);
+                        }
+                    }
+                }
+            }
+        } catch (Exception e) {
+            if (debugMode) {
+                getLogger().log(Level.WARNING, "[DEBUG] Error with ipinfo.io service for IP: " + ipAddress, e);
+            }
         }
-        return new PlayerLocation("Saudi Arabia", "Mecca", 21.3891, 39.8579, "Asia/Riyadh");
+        
+        return null;
+    }
+    
+    private PlayerLocation tryIpGeolocationService(String ipAddress) {
+        try {
+            if (debugMode) {
+                getLogger().info("[DEBUG] Trying ipgeolocation.io service for IP: " + ipAddress);
+            }
+            
+            // Note: This service requires an API key for production use, but has a free tier
+            URL url = new URL("http://ip-api.com/json/" + ipAddress); // Using ip-api as backup since ipgeolocation requires key
+            HttpURLConnection connection = (HttpURLConnection) url.openConnection();
+            connection.setRequestMethod("GET");
+            connection.setConnectTimeout(10000);
+            connection.setReadTimeout(10000);
+            
+            int responseCode = connection.getResponseCode();
+            if (responseCode == 200) {
+                BufferedReader reader = new BufferedReader(new InputStreamReader(connection.getInputStream()));
+                StringBuilder response = new StringBuilder();
+                String line;
+                
+                while ((line = reader.readLine()) != null) {
+                    response.append(line);
+                }
+                reader.close();
+                
+                JsonObject jsonObject = JsonParser.parseString(response.toString()).getAsJsonObject();
+                
+                if (jsonObject.has("status") && "success".equals(jsonObject.get("status").getAsString())) {
+                    String country = jsonObject.get("country").getAsString();
+                    String city = jsonObject.get("city").getAsString();
+                    double latitude = jsonObject.get("lat").getAsDouble();
+                    double longitude = jsonObject.get("lon").getAsDouble();
+                    String timezone = jsonObject.get("timezone").getAsString();
+                    
+                    if (isValidLocationData(country, city, latitude, longitude, timezone)) {
+                        if (debugMode) {
+                            getLogger().info("[DEBUG] Successfully got valid location from backup service");
+                        }
+                        return new PlayerLocation(country, city, latitude, longitude, timezone);
+                    }
+                }
+            }
+        } catch (Exception e) {
+            if (debugMode) {
+                getLogger().log(Level.WARNING, "[DEBUG] Error with backup geolocation service for IP: " + ipAddress, e);
+            }
+        }
+        
+        return null;
+    }
+    
+    private boolean isValidLocationData(String country, String city, double latitude, double longitude, String timezone) {
+        // Basic validation checks
+        if (country == null || country.trim().isEmpty()) {
+            if (debugMode) {
+                getLogger().warning("[DEBUG] Invalid location: empty country");
+            }
+            return false;
+        }
+        
+        if (city == null || city.trim().isEmpty()) {
+            if (debugMode) {
+                getLogger().warning("[DEBUG] Invalid location: empty city");
+            }
+            return false;
+        }
+        
+        // Check for obviously invalid coordinates
+        if (latitude == 0.0 && longitude == 0.0) {
+            if (debugMode) {
+                getLogger().warning("[DEBUG] Invalid location: coordinates are 0,0");
+            }
+            return false;
+        }
+        
+        // Check latitude range
+        if (latitude < -90 || latitude > 90) {
+            if (debugMode) {
+                getLogger().warning("[DEBUG] Invalid location: latitude out of range: " + latitude);
+            }
+            return false;
+        }
+        
+        // Check longitude range
+        if (longitude < -180 || longitude > 180) {
+            if (debugMode) {
+                getLogger().warning("[DEBUG] Invalid location: longitude out of range: " + longitude);
+            }
+            return false;
+        }
+        
+        if (timezone == null || timezone.trim().isEmpty()) {
+            if (debugMode) {
+                getLogger().warning("[DEBUG] Invalid location: empty timezone");
+            }
+            return false;
+        }
+        
+        return true;
     }
 
     private Map<String, String> getPrayerTimes(double latitude, double longitude, String date) {
