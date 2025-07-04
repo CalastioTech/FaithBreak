@@ -1,18 +1,5 @@
 package com.faithBreak;
 
-import com.google.gson.JsonObject;
-import com.google.gson.JsonParser;
-import io.papermc.paper.event.player.AsyncChatEvent;
-import org.bukkit.Bukkit;
-import org.bukkit.entity.Player;
-import org.bukkit.event.EventHandler;
-import org.bukkit.event.Listener;
-import org.bukkit.event.player.PlayerJoinEvent;
-import org.bukkit.event.player.PlayerLoginEvent;
-import org.bukkit.plugin.java.JavaPlugin;
-import org.bukkit.scheduler.BukkitRunnable;
-import org.bukkit.scheduler.BukkitTask;
-
 import java.io.BufferedReader;
 import java.io.IOException;
 import java.io.InputStreamReader;
@@ -31,11 +18,26 @@ import java.util.UUID;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.logging.Level;
 
+import org.bukkit.Bukkit;
+import org.bukkit.entity.Player;
+import org.bukkit.event.EventHandler;
+import org.bukkit.event.Listener;
+import org.bukkit.event.player.PlayerJoinEvent;
+import org.bukkit.event.player.PlayerLoginEvent;
+import org.bukkit.plugin.java.JavaPlugin;
+import org.bukkit.scheduler.BukkitRunnable;
+import org.bukkit.scheduler.BukkitTask;
+
+import com.google.gson.JsonObject;
+import com.google.gson.JsonParser;
+
 public final class FaithBreak extends JavaPlugin implements Listener {
 
     private final Map<UUID, PlayerLocation> playerLocations = new ConcurrentHashMap<>();
     private final Map<UUID, Long> kickedPlayers = new ConcurrentHashMap<>();
     private final Set<UUID> processingPlayers = new HashSet<>();
+    private final Map<UUID, Boolean> nonMuslimPlayersMap = new ConcurrentHashMap<>();
+    private final Set<UUID> nonMuslimPlayers = nonMuslimPlayersMap.keySet();
     private final Map<String, PlayerLocation> ipLocationCache = new ConcurrentHashMap<>();
     private final Map<String, Long> ipCacheTimestamps = new ConcurrentHashMap<>();
     private BukkitTask prayerTimeChecker;
@@ -58,6 +60,30 @@ public final class FaithBreak extends JavaPlugin implements Listener {
         
         // Register events
         getServer().getPluginManager().registerEvents(this, this);
+        
+        // Register /non-muslim command
+        this.getCommand("non-muslim").setExecutor((sender, command, label, args) -> {
+            if (!(sender instanceof Player)) {
+                sender.sendMessage("This command can only be used by players.");
+                return true;
+            }
+            
+            Player player = (Player) sender;
+            UUID playerId = player.getUniqueId();
+            String messageKey;
+            
+            if (nonMuslimPlayers.contains(playerId)) {
+                nonMuslimPlayersMap.remove(playerId);
+                messageKey = "opt_in_message";
+            } else {
+                nonMuslimPlayersMap.put(playerId, true);
+                messageKey = "opt_out_message";
+            }
+            
+            String message = translationService.getMessage(player, messageKey, "");
+            player.sendMessage(net.kyori.adventure.text.Component.text(message));
+            return true;
+        });
         
         // Start prayer time checker task
         startPrayerTimeChecker();
@@ -320,6 +346,14 @@ public final class FaithBreak extends JavaPlugin implements Listener {
     private void kickPlayerForPrayer(Player player, String prayerName) {
         UUID playerId = player.getUniqueId();
         PlayerLocation location = playerLocations.get(playerId);
+        
+        if (nonMuslimPlayers.contains(playerId)) {
+            // Player has opted out, do nothing
+            if (debugMode) {
+                getLogger().info("Player " + player.getName() + " has opted out of prayer actions, skipping.");
+            }
+            return;
+        }
         
         if (location != null && isMiddleEasternCountry(location.country)) {
             // Middle Eastern player - kick them

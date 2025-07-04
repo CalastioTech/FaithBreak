@@ -1,5 +1,14 @@
 name: FaithBreak
-version: '1.2.0'
+version: '1.2.1'
 main: com.faithBreak.FaithBreak
 api-version: '1.21'
 authors: [ CalastioTech ]
+commands:
+  non-muslim:
+    description: Toggle opting out of prayer time kicks and reminders.
+    usage: /non-muslim
+    permission: faithbreak.nonmuslim
+permissions:
+  faithbreak.nonmuslim:
+    description: Allows players to use the /non-muslim command to opt out of prayer time actions.
+    default: true

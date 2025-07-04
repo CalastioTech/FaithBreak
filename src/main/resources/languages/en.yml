@@ -1,3 +1,5 @@
 kick_message: "You have been kicked for: {0}"
 rejoin_warning: "Please wait {0} more minutes before rejoining."
-prayer_reminder: "§6Prayer time reminder: It's {0} prayer time now. Taking a short break is recommended.§r"
+prayer_reminder: "§6Prayer time reminder: It's {0} prayer time now. Taking a short break is recommended. Use /non-muslim to opt out of reminders and kicks.§r"
+opt_out_message: "§6You have opted out of prayer time kicks and reminders. Use /non-muslim again to opt back in.§r"
+opt_in_message: "§6You have opted back in to prayer time kicks and reminders. Use /non-muslim to opt out.§r"
