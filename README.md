@@ -18,11 +18,25 @@ FaithBreak is a unique Minecraft plugin that helps players take breaks during pr
 - ⏱️ **Timely Reminders**: Two minutes before prayer time, players are gently kicked from the server
 - ⏳ **Break Duration**: Players can't rejoin for 12 minutes, giving them time for prayer or a short break
 - 🌐 **Universal Respect**: Non-Muslim players are also encouraged to take regular breaks for well-being
+- 🎯 **Player Choice**: Use `/non-muslim` command to opt out of prayer time kicks and reminders (toggle on/off)
 - 🌐 **Multi-Language Magic**: Messages automatically appear in each player's Minecraft language!
 
 The plugin works silently in the background with zero configuration needed. It uses geolocation services and prayer time APIs to ensure accuracy across different regions and timezones.
 
 **💡 Server Owners**: Want to add more languages? Simply create `[language-code].yml` files in the `plugins/FaithBreak/languages` folder with your translations!
+
+---
+
+## 🎮 Commands
+
+### `/non-muslim`
+- **Description**: Toggle opting out of prayer time kicks and reminders
+- **Usage**: Simply type `/non-muslim` in chat
+- **Permission**: `faithbreak.nonmuslim` (default: true for all players)
+- **How it works**: 
+  - First use: Opts you out of prayer time kicks and reminders
+  - Second use: Opts you back in to receive kicks and reminders
+  - Your choice is remembered across server restarts
 
 ---
 
